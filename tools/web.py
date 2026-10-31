@@ -1,16 +1,30 @@
-from ddgs import DDGS
+import asyncio
 import json
+from ddgs import DDGS
 
-def web_search(query: str, max_results: int = 5):
-    """Perform a web search using DuckDuckGo without API keys."""
+
+def _search(query: str, max_results: int) -> list:
+    """Synchronous search executed in a worker thread."""
+    with DDGS() as browser:
+        return list(browser.text(query, max_results=max_results))
+
+
+async def web_search(query: str, max_results: int = 5) -> str:
+    """Search the web without blocking the event loop."""
     try:
-        with DDGS() as browser:
-            results = [r for r in browser.text(query, max_results=max_results)]
-            if not results:
-                return "No search results found."
-            return json.dumps(results)
+        results = await asyncio.to_thread(
+            _search,
+            query,
+            max_results
+        )
+
+        if not results:
+            return "No search results found."
+
+        return json.dumps(results)
+
     except Exception as e:
-        return f"Search error: {str(e)}"
+        return f"Search error: {e}"
 
 # Schemas
 WEB_SEARCH_TOOL = {

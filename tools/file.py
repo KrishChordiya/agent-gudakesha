@@ -1,52 +1,63 @@
-from pathlib import Path
+import asyncio
 import os
 import tempfile
+from pathlib import Path
+from aiofile import async_open
 
 ROOT = Path.cwd().resolve()
 
-def read_file(file_path: str) -> str:
-    """Read a UTF-8 text file and return its contents."""
+
+def resolve_path(file_path: str) -> Path:
     path = (ROOT / file_path).resolve()
 
     if not path.is_relative_to(ROOT):
-        return "Error: Access denied"
+        raise ValueError("Access denied")
 
+    return path
+
+
+async def read_file(file_path: str) -> str:
+    """Read a UTF-8 text file asynchronously."""
     try:
-        return path.read_text(encoding="utf-8")
-    except OSError as e:
+        path = resolve_path(file_path)
+
+        async with async_open(path, "r", encoding="utf-8") as f:
+            return await f.read()
+
+    except (OSError, ValueError, UnicodeError) as e:
         return f"Error: {e}"
 
-def write_file(file_path: str, content: str) -> str:
-    """Safely write an allowed Markdown file."""
 
-    path = (ROOT / file_path).resolve()
-
-    if not path.is_relative_to(ROOT):
-        return "Error: Access denied"
-
+async def write_file(file_path: str, content: str) -> str:
+    """Atomically write a UTF-8 text file."""
     temporary = None
 
     try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=ROOT,
+        path = resolve_path(file_path)
+
+        # Create a unique temporary file in the target directory.
+        fd, name = await asyncio.to_thread(
+            tempfile.mkstemp,
             prefix=".preferences-",
             suffix=".tmp",
-            delete=False
-        ) as f:
-            temporary = Path(f.name)
-            f.write(content)
+            dir=path.parent
+        )
+        temporary = Path(name)
+        os.close(fd)
 
-        os.replace(temporary, path)
+        async with async_open(temporary, "w", encoding="utf-8") as f:
+            await f.write(content)
+
+        await asyncio.to_thread(os.replace, temporary, path)
+
         return f"Successfully wrote {file_path}"
 
-    except OSError as e:
-        if temporary is not None:
-            temporary.unlink(missing_ok=True)
+    except (OSError, ValueError, UnicodeError) as e:
         return f"Error: {e}"
 
-# def edit_o
+    finally:
+        if temporary is not None:
+            await asyncio.to_thread(temporary.unlink, missing_ok=True)
 
 
 READ_FILE_TOOL = {

@@ -1,23 +1,41 @@
-import subprocess
+import asyncio
 
-def execute_bash(command: str, timeout: int = 30):
-    """Run a bash command and return stdout/stderr."""
+async def execute_bash(command: str, timeout: int = 30) -> str:
+    """Execute a shell command asynchronously."""
+    process = None
+
     try:
-        result = subprocess.run(
+        process = await asyncio.create_subprocess_shell(
             command,
-            shell=True,
-            capture_output=True,
-            text=True,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+
+        stdout, stderr = await asyncio.wait_for(
+            process.communicate(),
             timeout=timeout
         )
-        output = result.stdout
-        if result.stderr:
-            output += f"\n[stderr]:\n{result.stderr}"
+
+        output = stdout.decode(errors="replace")
+
+        if stderr:
+            output += f"\n[stderr]:\n{stderr.decode(errors='replace')}"
+
+        if process.returncode != 0:
+            output += f"\n[exit code]: {process.returncode}"
+
         return output.strip() or "Command executed successfully with no output."
-    except subprocess.TimeoutExpired:
+
+    except asyncio.TimeoutError:
+        if process is not None:
+            process.kill()
+            await process.communicate()
+
         return f"Error: Command timed out after {timeout} seconds."
+
     except Exception as e:
-        return f"Error executing command: {str(e)}"
+        return f"Error executing command: {e}"
+
 
 # Schema
 BASH_TOOL = {

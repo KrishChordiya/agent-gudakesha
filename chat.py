@@ -1,5 +1,5 @@
-import json
 import os
+import asyncio
 from dotenv import load_dotenv
 
 from client import Client
@@ -12,7 +12,7 @@ BASE_URL = os.getenv("BASE_URL")
 MODEL = os.getenv("MODEL")
 API_KEY=os.getenv("API_KEY")
 
-if __name__=="__main__":
+async def main():
     # Clients
     client = Client(BASE_URL, MODEL, API_KEY)
 
@@ -25,7 +25,10 @@ if __name__=="__main__":
         user_input = input("\nUser: ")
         
         if user_input=="/exit":
-            client.close()
+            await client.close()
             break
 
-        client.chat(user_input, TOOLS, max_iteration=10)
+        await client.chat(user_input, TOOLS, max_iteration=10)
+
+if __name__=="__main__":
+    asyncio.run(main())

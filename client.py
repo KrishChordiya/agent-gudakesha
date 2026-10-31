@@ -5,7 +5,7 @@ import json
 class Client:
     def __init__(self, base_url, model, api_key, tool_executor=None):
         self.model = model
-        self.client = httpx.Client(
+        self.client = httpx.AsyncClient(
             base_url=base_url,
             headers={"Authorization": f"Bearer {api_key}"},
             timeout=180
@@ -14,27 +14,27 @@ class Client:
         
         self.tool_executor = tool_executor or execute_tool
 
-    def execute_tool(self, name, args):
+    async def execute_tool(self, name, args):
         GRAY = "\033[38;5;245m"
         RESET = "\033[0m"
         print("\n\nTool Call:")
         print(f"{GRAY}{name}:{args}{RESET}")
-        return self.tool_executor(name, args)
+        return await self.tool_executor(name, args)
         
-    def stream_response(self, payload):
+    async def stream_response(self, payload):
         GRAY = "\033[38;5;245m"
         RESET = "\033[0m"
         content = ""
         tool_calls = {}
         last_section = None
-        with self.client.stream(
+        async with self.client.stream(
             "POST",
             "chat/completions",
             json=payload
         ) as response:
             response.raise_for_status()
 
-            for chunk in response.iter_lines():
+            async for chunk in response.aiter_lines():
                 if not chunk.startswith("data:"):
                     continue
                 
@@ -89,7 +89,7 @@ class Client:
 
         return reply
 
-    def chat(self, user_input, tools=None, max_iteration=10):
+    async def chat(self, user_input, tools=None, max_iteration=10):
         self.messages.append({
             "role":"user",
             "content": user_input
@@ -106,7 +106,7 @@ class Client:
                 payload["tools"] = tools
 
             # Get complete streamed assistant response
-            reply = self.stream_response(payload)
+            reply = await self.stream_response(payload)
 
             # Store assistant response
             self.messages.append(reply)
@@ -118,7 +118,7 @@ class Client:
                 function = call["function"]
                 name = function["name"]
                 args = json.loads(function["arguments"])
-                result = self.execute_tool(name, args)
+                result = await self.execute_tool(name, args)
 
                 self.messages.append({
                     "role":"tool",
@@ -131,5 +131,5 @@ class Client:
     def get_messages(self):
         return self.messages
 
-    def close(self):
-        self.client.close()
+    async def close(self):
+        await self.client.aclose()
