@@ -10,7 +10,6 @@ class Client:
             headers={"Authorization": f"Bearer {api_key}"},
             timeout=180
         )
-        self.messages=[]
         
         self.tool_executor = tool_executor or execute_tool
 
@@ -89,8 +88,8 @@ class Client:
 
         return reply
 
-    async def chat(self, user_input, tools=None, max_iteration=10):
-        self.messages.append({
+    async def chat(self,session, user_input, tools=None, max_iteration=10):
+        session.messages.append({
             "role":"user",
             "content": user_input
         })
@@ -98,7 +97,7 @@ class Client:
         for _ in range(max_iteration):
             payload = {
                 "model": self.model,
-                "messages": self.messages,
+                "messages": session.messages,
                 "stream": True
             }
 
@@ -109,7 +108,7 @@ class Client:
             reply = await self.stream_response(payload)
 
             # Store assistant response
-            self.messages.append(reply)
+            session.messages.append(reply)
 
             if not reply.get("tool_calls"):
                 return
@@ -120,16 +119,13 @@ class Client:
                 args = json.loads(function["arguments"])
                 result = await self.execute_tool(name, args)
 
-                self.messages.append({
+                session.messages.append({
                     "role":"tool",
                     "tool_call_id": call["tool_id"],
                     "content": result.model_dump_json()
                 })
 
         raise RuntimeError("Exceeded maximum tool call iterations")
-    
-    def get_messages(self):
-        return self.messages
 
     async def close(self):
         await self.client.aclose()
