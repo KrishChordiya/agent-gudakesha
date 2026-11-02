@@ -6,5 +6,6 @@ dependencies = [
     "aiofile>=3.12.3",
     "ddgs>=9.16.1",
     "httpx>=0.28.1",
+    "pydantic>=2.14.2",
     "python-dotenv>=1.2.4",
 ]

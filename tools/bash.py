@@ -1,41 +1,29 @@
 import asyncio
+from .model import BashArgs
 
-async def execute_bash(command: str, timeout: int = 30) -> str:
+async def execute_bash(args:BashArgs) -> str:
     """Execute a shell command asynchronously."""
-    process = None
+    
+    process = await asyncio.create_subprocess_shell(
+        args.command,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE
+    )
 
-    try:
-        process = await asyncio.create_subprocess_shell(
-            command,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
+    stdout, stderr = await asyncio.wait_for(
+        process.communicate(),
+        timeout=args.timeout
+    )
 
-        stdout, stderr = await asyncio.wait_for(
-            process.communicate(),
-            timeout=timeout
-        )
+    output = stdout.decode(errors="replace")
 
-        output = stdout.decode(errors="replace")
+    if stderr:
+        output += f"\n[stderr]:\n{stderr.decode(errors='replace')}"
 
-        if stderr:
-            output += f"\n[stderr]:\n{stderr.decode(errors='replace')}"
+    if process.returncode != 0:
+        output += f"\n[exit code]: {process.returncode}"
 
-        if process.returncode != 0:
-            output += f"\n[exit code]: {process.returncode}"
-
-        return output.strip() or "Command executed successfully with no output."
-
-    except asyncio.TimeoutError:
-        if process is not None:
-            process.kill()
-            await process.communicate()
-
-        return f"Error: Command timed out after {timeout} seconds."
-
-    except Exception as e:
-        return f"Error executing command: {e}"
-
+    return output.strip() or "Command executed successfully with no output."
 
 # Schema
 BASH_TOOL = {

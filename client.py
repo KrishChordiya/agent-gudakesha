@@ -123,7 +123,7 @@ class Client:
                 self.messages.append({
                     "role":"tool",
                     "tool_call_id": call["tool_id"],
-                    "content": result
+                    "content": result.model_dump_json()
                 })
 
         raise RuntimeError("Exceeded maximum tool call iterations")

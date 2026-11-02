@@ -1,6 +1,7 @@
 import asyncio
 import json
 from ddgs import DDGS
+from .model import WebSearchArgs
 
 
 def _search(query: str, max_results: int) -> list:
@@ -9,22 +10,19 @@ def _search(query: str, max_results: int) -> list:
         return list(browser.text(query, max_results=max_results))
 
 
-async def web_search(query: str, max_results: int = 5) -> str:
+async def web_search(args:WebSearchArgs) -> str:
     """Search the web without blocking the event loop."""
-    try:
-        results = await asyncio.to_thread(
-            _search,
-            query,
-            max_results
-        )
 
-        if not results:
-            return "No search results found."
+    results = await asyncio.to_thread(
+        _search,
+        args.query,
+        args.max_results
+    )
 
-        return json.dumps(results)
+    if not results:
+        return "No search results found."
 
-    except Exception as e:
-        return f"Search error: {e}"
+    return json.dumps(results)
 
 # Schemas
 WEB_SEARCH_TOOL = {

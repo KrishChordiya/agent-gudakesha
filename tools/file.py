@@ -3,6 +3,7 @@ import os
 import tempfile
 from pathlib import Path
 from aiofile import async_open
+from .model import ReadFileArgs, WriteFileArgs, ToolResult
 
 ROOT = Path.cwd().resolve()
 
@@ -16,49 +17,39 @@ def resolve_path(file_path: str) -> Path:
     return path
 
 
-async def read_file(file_path: str) -> str:
+async def read_file(args: ReadFileArgs) -> str:
     """Read a UTF-8 text file asynchronously."""
-    try:
-        path = resolve_path(file_path)
+    path = resolve_path(args.file_path)
 
-        async with async_open(path, "r", encoding="utf-8") as f:
-            return await f.read()
+    async with async_open(path, "r", encoding="utf-8") as f:
+        return await f.read()
 
-    except (OSError, ValueError, UnicodeError) as e:
-        return f"Error: {e}"
-
-
-async def write_file(file_path: str, content: str) -> str:
+async def write_file(args: WriteFileArgs) -> str:
     """Atomically write a UTF-8 text file."""
     temporary = None
 
-    try:
-        path = resolve_path(file_path)
 
-        # Create a unique temporary file in the target directory.
-        fd, name = await asyncio.to_thread(
-            tempfile.mkstemp,
-            prefix=".preferences-",
-            suffix=".tmp",
-            dir=path.parent
-        )
-        temporary = Path(name)
-        os.close(fd)
+    path = resolve_path(args.file_path)
 
-        async with async_open(temporary, "w", encoding="utf-8") as f:
-            await f.write(content)
+    # Create a unique temporary file in the target directory.
+    fd, name = await asyncio.to_thread(
+        tempfile.mkstemp,
+        prefix=".preferences-",
+        suffix=".tmp",
+        dir=path.parent
+    )
+    temporary = Path(name)
+    os.close(fd)
 
-        await asyncio.to_thread(os.replace, temporary, path)
+    async with async_open(temporary, "w", encoding="utf-8") as f:
+        await f.write(args.content)
 
-        return f"Successfully wrote {file_path}"
+    await asyncio.to_thread(os.replace, temporary, path)
 
-    except (OSError, ValueError, UnicodeError) as e:
-        return f"Error: {e}"
+    if temporary is not None:
+        await asyncio.to_thread(temporary.unlink, missing_ok=True)
 
-    finally:
-        if temporary is not None:
-            await asyncio.to_thread(temporary.unlink, missing_ok=True)
-
+    return f"Successfully wrote {args.file_path}"
 
 READ_FILE_TOOL = {
         "type": "function",
