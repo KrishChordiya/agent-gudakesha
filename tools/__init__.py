@@ -42,7 +42,7 @@ async def execute_tool(name: str, args: dict) -> ToolResult:
 
     except ValidationError as e:
         return ToolResult(
-            success=False,
+            status="error",
             error=str(e),
             error_code="INVALID_ARGUMENTS"
         )
