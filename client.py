@@ -175,10 +175,19 @@ class Client:
                     if function.get("arguments"):
                         current["function"]["arguments"] += function["arguments"]
 
+        tool_calls = list(tool_calls.values())
 
-        return reasoning, content, list(tool_calls.values()), usage
+        for call in tool_calls:
+            function = call["function"]
 
-    
+            if not call.get("id") or not function.get("name"):
+                raise ValueError("Incomplete model tool call")
+
+            if not function.get("arguments"):
+                raise ValueError("Missing tool call arguments")
+
+        return reasoning, content, tool_calls, usage
+
     async def chat(self, session, user_input, tools=None, max_iteration=10):
         async with session.lock:
             tracer = Tracer(session.id)
@@ -215,27 +224,41 @@ class Client:
                             await self.stream_response(payload)
                         )
 
-                    except Exception as e:
-                        duration_ms = round(
-                            (time.perf_counter() - start) * 1000, 2
-                        )
+                    except httpx.TimeoutException:
+                        error_message = "Model request timed out"
 
+                    except httpx.HTTPStatusError as e:
+                        error_message = f"Model API returned HTTP {e.response.status_code}"
+
+                    except httpx.RequestError as e:
+                        error_message = f"Model connection failed: {e}"
+
+                    except Exception:
+                        error_message = "Unexpected model execution failure"
+                        logger.exception("Model execution failed")
+
+                    else:
+                        error_message = None
+
+                    if error_message:
                         tracer.record_model(
                             turn_id=turn_id,
                             reasoning="",
                             content=None,
                             tool_calls=[],
                             usage={},
-                            duration_ms=duration_ms,
+                            duration_ms=round(
+                                (time.perf_counter() - start) * 1000, 2
+                            ),
                             status="error",
-                            error_message=str(e)
+                            error_message=error_message
                         )
-                        raise
+
+                        raise RuntimeError(error_message)
 
                     duration_ms = round(
                         (time.perf_counter() - start) * 1000, 2
                     )
-
 
                     # Record model event
                     tracer.record_model(
@@ -302,6 +325,17 @@ class Client:
                             "tool_call_id": call["id"],
                             "content": result.model_dump_json()
                         })
+
+                tracer.record_model(
+                    turn_id=turn_id,
+                    reasoning="",
+                    content=None,
+                    tool_calls=[],
+                    usage={},
+                    duration_ms=0,
+                    status="error",
+                    error_message="Exceeded maximum tool call iterations"
+                )
 
                 raise RuntimeError("Exceeded maximum tool call iterations")
 
