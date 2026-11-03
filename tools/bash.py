@@ -10,10 +10,16 @@ async def execute_bash(args:BashArgs) -> str:
         stderr=asyncio.subprocess.PIPE
     )
 
-    stdout, stderr = await asyncio.wait_for(
-        process.communicate(),
-        timeout=args.timeout
-    )
+    try:
+        stdout, stderr = await asyncio.wait_for(
+            process.communicate(),
+            timeout=args.timeout
+        )
+        
+    except TimeoutError:
+        process.kill()
+        await process.communicate()
+        raise
 
     output = stdout.decode(errors="replace")
 

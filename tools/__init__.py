@@ -23,33 +23,19 @@ TOOL_REGISTRY = {
 
 async def execute_tool(name: str, args: dict) -> ToolResult:
     """Execute a registered asynchronous tool."""
-    tool, schema = TOOL_REGISTRY.get(name, (None, None))
-
-    if tool is None:
-        return ToolResult(
-            status="error",
-            error_message=f"Tool {name} unknown.",
-            error_code = "UNKNOWN_TOOL"
-        )
-
+    # Handled here to prevent classifying a KeyError raised inside a tool as an unknown tool.
     try:
-            validated_args = schema.model_validate(args)
-            result = await tool(validated_args)
-            return ToolResult(
-                status = "success",
-                data = result
-            )
-
-    except ValidationError as e:
+        tool, schema = TOOL_REGISTRY[name]
+    except KeyError:
         return ToolResult(
             status="error",
-            error=str(e),
-            error_code="INVALID_ARGUMENTS"
+            error_message=f"Unknown tool: {name}",
+            error_code="UNKNOWN_TOOL"
         )
 
-    except Exception as e:
-        return ToolResult(
-            status="error",
-            error_message=str(e),
-            error_code = "TOOL_FAILURE"
-        )
+    validated_args = schema.model_validate(args)
+    result = await tool(validated_args)
+    return ToolResult(
+        status = "success",
+        data = result
+    )

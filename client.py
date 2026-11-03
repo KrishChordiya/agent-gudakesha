@@ -1,10 +1,21 @@
 import time
 import json
 import httpx
+import logging
 
+from pydantic import ValidationError
 from tools import execute_tool
 from tools.model import ToolResult
 from tracer import Tracer
+
+# Configure once at app startup
+logging.basicConfig(
+    level=logging.ERROR,  # must be <= ERROR to see logger.exception() output
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+# Get a named logger (use __name__ for module-level context)
+logger = logging.getLogger(__name__)
 
 class Client:
     def __init__(self, base_url, model, api_key, tool_executor=None):
@@ -29,17 +40,55 @@ class Client:
         print(f"\nTool Call: {name}: {args}")
 
         start = time.perf_counter()
-
+        result = None
         try:
             result = await self.tool_executor(name, args)
+        
+        except ValidationError as e:
+            result = ToolResult(
+                status="error",
+                error_message=str(e),
+                error_code="INVALID_TOOL_ARGUMENTS"
+            )
 
-        except Exception as e:
+        except PermissionError as e:
+            result = ToolResult(
+                status="error",
+                error_message=str(e),
+                error_code="ACCESS_DENIED"
+            )
+
+        except TimeoutError as e:
+            result = ToolResult(
+                status="error",
+                error_message="Tool execution timed out",
+                error_code="TOOL_TIMEOUT"
+            )
+
+        except OSError as e:
+            result = ToolResult(
+                status="error",
+                error_message=str(e),
+                error_code=f"{name.upper()}_ERROR"
+            )
+
+        except LookupError as e:
+            result = ToolResult(
+                status="error",
+                error_message=str(e),
+                error_code="INVALID_TOOL_NAME"
+            )
+
+        except Exception:
+            logger.exception("Unexpected failure executing tool: %s", name)
+
             result = ToolResult(
                 status="error",
                 error_message="Unexpected tool executor failure",
                 error_code="TOOL_FAILURE"
             )
 
+        finally:
             tracer.record_tool(
                 turn_id=turn_id,
                 tool_call_id=tool_call_id,
@@ -50,19 +99,6 @@ class Client:
                     (time.perf_counter() - start) * 1000, 2
                 )
             )
-
-            raise
-
-        tracer.record_tool(
-            turn_id=turn_id,
-            tool_call_id=tool_call_id,
-            name=name,
-            arguments=args,
-            result=result,
-            duration_ms=round(
-                (time.perf_counter() - start) * 1000, 2
-            )
-        )
 
         return result
 

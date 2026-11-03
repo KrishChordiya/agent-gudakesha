@@ -12,7 +12,7 @@ def resolve_path(file_path: str) -> Path:
     path = (ROOT / file_path).resolve()
 
     if not path.is_relative_to(ROOT):
-        raise ValueError("Access denied")
+        raise PermissionError("Access denied")
 
     return path
 
@@ -31,23 +31,25 @@ async def write_file(args: WriteFileArgs) -> str:
 
     path = resolve_path(args.file_path)
 
-    # Create a unique temporary file in the target directory.
-    fd, name = await asyncio.to_thread(
-        tempfile.mkstemp,
-        prefix=".preferences-",
-        suffix=".tmp",
-        dir=path.parent
-    )
-    temporary = Path(name)
-    os.close(fd)
+    try:
+        # Create a unique temporary file in the target directory.
+        fd, name = await asyncio.to_thread(
+            tempfile.mkstemp,
+            prefix=".preferences-",
+            suffix=".tmp",
+            dir=path.parent
+        )
+        temporary = Path(name)
+        os.close(fd)
 
-    async with async_open(temporary, "w", encoding="utf-8") as f:
-        await f.write(args.content)
+        async with async_open(temporary, "w", encoding="utf-8") as f:
+            await f.write(args.content)
 
-    await asyncio.to_thread(os.replace, temporary, path)
+        await asyncio.to_thread(os.replace, temporary, path)
 
-    if temporary is not None:
-        await asyncio.to_thread(temporary.unlink, missing_ok=True)
+    finally:
+        if temporary is not None:
+            await asyncio.to_thread(temporary.unlink, missing_ok=True)
 
     return f"Successfully wrote {args.file_path}"
 
